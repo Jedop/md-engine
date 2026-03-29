@@ -1,3 +1,0 @@
-/home/jedopw/Programming/PHY425/TermProject/build/debug/CMakeFiles/MD_Engine.dir
-/home/jedopw/Programming/PHY425/TermProject/build/debug/CMakeFiles/edit_cache.dir
-/home/jedopw/Programming/PHY425/TermProject/build/debug/CMakeFiles/rebuild_cache.dir

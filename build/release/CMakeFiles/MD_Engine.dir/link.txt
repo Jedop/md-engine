@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/MD_Engine.dir/link.d CMakeFiles/MD_Engine.dir/src/main.cpp.o -o MD_Engine
