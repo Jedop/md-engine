@@ -43,13 +43,13 @@ compute_all_forces(const std::vector<Particle> &Particles) {
 std::tuple<double, double, double> update(std::vector<Particle> &Particles,
                                           double dt) {
   // 1. Pre-Force Update (Move everyone to new positions)
-  VelocityVerlet::step1(Particles, dt);
+  Leapfrog::step1(Particles, dt);
 
   // 2. Synchronous Force Calculation (Calculate forces at the NEW positions)
   auto [new_acc, potential_energy] = compute_all_forces(Particles);
 
   // 3. Post-Force Update (Finish the time step using the new forces)
-  VelocityVerlet::step2(Particles, new_acc, dt);
+  Leapfrog::step2(Particles, new_acc, dt);
 
   double kinetic_energy = 0;
 
@@ -83,20 +83,18 @@ int main() {
     }
   }
 
-  Particles[3].position = {12.0001, 12.0001, 38.2501};
   Particles[3].velocity = {1.0, 1.0, 1.0};
   auto [initial_acc, _] = compute_all_forces(Particles);
   for (size_t i = 0; i < Particles.size(); i++) {
     Particles[i].acceleration = initial_acc[i];
   }
 
-  int no_of_frames = 100000;
+  int no_of_frames = 20000;
   std::ofstream traj_file("trajectory.xyz");
   std::ofstream data_file("thermo.dat");
   for (int i = 0; i < no_of_frames; i++) {
     std::cout << i << "\n";
-    auto [potential_energy, kinetic_energy, Energy] =
-        update(Particles, 0.00001);
+    auto [potential_energy, kinetic_energy, Energy] = update(Particles, 0.001);
 
     if (i % 1 == 0) {
       traj_file << Particles.size() << "\n";
