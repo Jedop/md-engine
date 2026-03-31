@@ -1,4 +1,5 @@
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <tuple>
@@ -8,49 +9,114 @@
 #include "Particle.hpp"
 #include "Vectors.hpp"
 
-constexpr double box = 70;
+constexpr int N = 512;
+constexpr double box = 8.976;
 constexpr double box_r = 1 / box;
+constexpr double rc = 2.5;
 
+constexpr int nx = int(box / rc);
+constexpr int num_cells = nx * nx * nx;
+constexpr double cell_size = box / nx;
+
+// Calculates flat index of cell
+int cell_index(int ix, int iy, int iz) {
+  ix = (ix + nx) % nx;
+  iy = (iy + nx) % nx;
+  iz = (iz + nx) % nx;
+  return ix + iy * nx + iz * nx * nx;
+}
+
+// Calculates cell index given position
+std::tuple<int, int, int> get_cell(const Vec3 &p) {
+  int ix = int(std::floor(p.x / cell_size));
+  int iy = int(std::floor(p.y / cell_size));
+  int iz = int(std::floor(p.z / cell_size));
+  return {ix, iy, iz};
+}
+
+// Builds the cell linked lists
+void build_cell_lists(const std::vector<Particle> &Particles,
+                      std::vector<int> &head, std::vector<int> &next) {
+  std::fill(head.begin(), head.end(), -1);
+
+  for (size_t i = 0; i < Particles.size(); i++) {
+    auto [cx, cy, cz] = get_cell(Particles[i].position);
+    int c = cell_index(cx, cy, cz);
+    next[i] = head[c];
+    head[c] = i;
+  }
+}
+
+// Computes all forces
 std::pair<std::vector<Vec3>, double>
-compute_all_forces(const std::vector<Particle> &Particles) {
+compute_all_forces(const std::vector<Particle> &Particles,
+                   const std::vector<int> &head, const std::vector<int> &next) {
   std::vector<Vec3> all_acc(Particles.size(), {0, 0, 0});
   double potential_energy = 0;
 
+  double inv_rc2 = 1.0 / (rc * rc);
+  double inv_rc6 = pow(inv_rc2, 3);
+
+  double U_rc = 4.0 * inv_rc6 * (inv_rc6 - 1.0);
+  // double F_rc = 24 * inv_rc2 * inv_rc6 * (2 * inv_rc6 - 1);
+
   for (size_t i = 0; i < Particles.size(); i++) {
-    for (size_t j = i + 1; j < Particles.size(); j++) {
+    auto [cx, cy, cz] = get_cell(Particles[i].position);
 
-      Vec3 r = Particles[i].position - Particles[j].position;
-      r.apply_pbc(box, box_r);
-      double r2 = r.x * r.x + r.y * r.y + r.z * r.z; // r^2
-      double rc = 2.5;
+    for (int dx = -1; dx <= 1; dx++) {
+      for (int dy = -1; dy <= 1; dy++) {
+        for (int dz = -1; dz <= 1; dz++) {
+          int nc = cell_index(cx + dx, cy + dy, cz + dz);
+          int j = head[nc];
 
-      if (r2 < 1e-12 || r2 > rc * rc)
-        continue; // Safety
+          while (j != -1) {
 
-      double inv_r2 = 1.0 / r2;
-      double inv_r6 = pow(inv_r2, 3);
+            if (j <= i) {
+              j = next[j];
+              continue;
+            }
+            Vec3 r = Particles[i].position - Particles[j].position;
+            r.apply_pbc(box, box_r);
+            double r2 = r.x * r.x + r.y * r.y + r.z * r.z; // r^2
 
-      Vec3 F = r * 24 * inv_r2 * inv_r6 * (2 * inv_r6 - 1);
+            if (r2 < 1e-12 || r2 > rc * rc) {
+              j = next[j];
+              continue; // Safety
+            }
+            double inv_r2 = 1.0 / r2;
+            double inv_r6 = inv_r2 * inv_r2 * inv_r2;
 
-      potential_energy += std::sqrt((F.x * F.x + F.y * F.y + F.z * F.z) * r2);
-      all_acc[i] += F;
-      all_acc[j] += F * -1;
+            Vec3 F = r * (24 * inv_r2 * inv_r6 * (2 * inv_r6 - 1));
+            double U = 4.0 * inv_r6 * (inv_r6 - 1.0);
+
+            potential_energy += U - U_rc;
+            all_acc[i] += F;
+            all_acc[j] += F * -1;
+            j = next[j];
+          }
+        }
+      }
     }
   }
   return {all_acc, potential_energy};
 }
 
 std::tuple<double, double, double> update(std::vector<Particle> &Particles,
-                                          double dt) {
+                                          std::vector<int> &head,
+                                          std::vector<int> &next, double dt) {
   // 1. Pre-Force Update (Move everyone to new positions)
-  Leapfrog::step1(Particles, dt);
+  VelocityVerlet::step1(Particles, dt);
 
-  // 2. Synchronous Force Calculation (Calculate forces at the NEW positions)
-  auto [new_acc, potential_energy] = compute_all_forces(Particles);
+  // 2. Rebuild the Grid
+  build_cell_lists(Particles, head, next);
 
-  // 3. Post-Force Update (Finish the time step using the new forces)
-  Leapfrog::step2(Particles, new_acc, dt);
+  // 3. Synchronous Force Calculation (Calculate forces at the NEW positions)
+  auto [new_acc, potential_energy] = compute_all_forces(Particles, head, next);
 
+  // 4. Post-Force Update (Finish the time step using the new forces)
+  VelocityVerlet::step2(Particles, new_acc, dt);
+
+  // Calculates Kinetic Energy
   double kinetic_energy = 0;
 
   for (const auto &p : Particles) {
@@ -64,8 +130,12 @@ std::tuple<double, double, double> update(std::vector<Particle> &Particles,
 }
 
 int main() {
+
+  // Initialization
   std::vector<Particle> Particles;
-  Particles.reserve(512);
+  Particles.reserve(N);
+  std::vector<int> head(num_cells, -1);
+  std::vector<int> next(N);
 
   int particles_per_side = 8;
   double spacing = box / particles_per_side;
@@ -83,35 +153,43 @@ int main() {
     }
   }
 
-  Particles[3].velocity = {1.0, 1.0, 1.0};
-  auto [initial_acc, _] = compute_all_forces(Particles);
+  // Particles[3].position = {12.0001, 12.0001, 38.2501};
+  // Particles[3].velocity = {1.0, 1.0, 1.0};
+  srand(time(0));
+  for (size_t i = 0; i < Particles.size(); i++) {
+    Particles[i].velocity = {((double)rand()) / RAND_MAX,
+                             ((double)rand()) / RAND_MAX,
+                             ((double)rand()) / RAND_MAX};
+  }
+  build_cell_lists(Particles, head, next);
+  auto [initial_acc, _] = compute_all_forces(Particles, head, next);
   for (size_t i = 0; i < Particles.size(); i++) {
     Particles[i].acceleration = initial_acc[i];
   }
 
-  int no_of_frames = 20000;
+  // Main Loop
+  int no_of_frames = 10000;
   std::ofstream traj_file("trajectory.xyz");
   std::ofstream data_file("thermo.dat");
   for (int i = 0; i < no_of_frames; i++) {
     std::cout << i << "\n";
-    auto [potential_energy, kinetic_energy, Energy] = update(Particles, 0.001);
+    auto [potential_energy, kinetic_energy, Energy] =
+        update(Particles, head, next, 0.001);
 
-    if (i % 1 == 0) {
+    if (i % 100 == 0) {
       traj_file << Particles.size() << "\n";
 
-      // THE MAGIC LINE: This tells OVITO you have a cubic box of size L x L x L
       traj_file << "Lattice=\"" << box << " 0.0 0.0 0.0 " << box
                 << " 0.0 0.0 0.0 " << box
                 << "\" Properties=species:S:1:pos:R:3\n";
 
       for (const auto &p : Particles) {
-        // Output the actual, UNWRAPPED drifting coordinates
         traj_file << "Ar " << p.position.x << " " << p.position.y << " "
                   << p.position.z << "\n";
       }
 
       data_file << potential_energy << " " << kinetic_energy << " " << Energy
-                << " " << (2 * kinetic_energy / 3 * 512) << "\n";
+                << " " << (2 * kinetic_energy / (3 * N)) << "\n";
     }
   }
   traj_file.close();
