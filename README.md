@@ -12,30 +12,30 @@ Currently, this project implements the following
 
 ## Key Features
 
-- Cell lists: Divides the space into cubes to optimize the Force Calculation Algorithm from $O(N^2)$ to $O(N)$, enabling simulation of 8000 particles for 10,000 timesteps in 170s.
-- Multiple Integrators: This enables comparison and numerical analyses of various methods of integration.
+- **Cell lists**: Divides the space into cubes to optimize the Force Calculation Algorithm from $O(N^2)$ to $O(N)$, enabling simulation of 8000 particles for 10,000 timesteps in 170s.
+- **Multiple Integrators**: This enables comparison and numerical analyses of various methods of integration.
 
 ## Physics & Implementation Details
 
 To ensure physical accuracy and numerical stability, the engine implements standard molecular dynamics conventions:
 
-- **Lennard-Jones Reduced Units:** All calculations (mass, energy, distance, time) are performed in dimensionless LJ reduced units to prevent floating-point underflow/overflow.
-- **Initialization:** Particles are initialized in a stable 3D lattice configuration. Initial velocities are assigned randomly centered at 0 to avoid large drift velocities.
+- **Lennard-Jones Reduced Units**: All calculations (mass, energy, distance, time) are performed in dimensionless LJ reduced units to prevent floating-point underflow/overflow.
+- **Initialization**: Particles are initialized in a stable 3D lattice configuration. Initial velocities are assigned randomly centered at 0 to avoid large drift velocities.
 - **Minimum Image Convention (MIC):** Implemented for calculating the shortest distance between particles across Periodic Boundary Conditions without expensive division operations.
-- **Force Truncation:** The LJ potential is cut off at $r_c = 2.5\sigma$ to optimize calculations.
+- **Force Truncation**: The LJ potential is cut off at $r_c = 2.5\sigma$ to optimize calculations.
 
 ## Numerical Analysis
 
 ### Euler vs Leapfrog vs Velocity Verlet
 
-| Integrator                  | Euler                            | Leapfrog                               | Velocity Verlet                                     |
-| --------------------------- | -------------------------------- | -------------------------------------- | --------------------------------------------------- |
-| Energy over time            | ![Euler](assets/EulerEnergy.png) | ![Leapfrog](assets/LeapfrogEnergy.png) | ![Velocity Verlet](assets/VelocityVerletEnergy.png) |
-| Relative Energy Fluctuation | 2.08                             | $1.34 \times 10^{-6}$                  | $7.91 \times 10^{-7}$                               |
+| Integrator                                         | Euler                            | Leapfrog                               | Velocity Verlet                                     |
+| -------------------------------------------------- | -------------------------------- | -------------------------------------- | --------------------------------------------------- | --------------------- | --------------------- |
+| **Energy over time**                               | ![Euler](assets/EulerEnergy.png) | ![Leapfrog](assets/LeapfrogEnergy.png) | ![Velocity Verlet](assets/VelocityVerletEnergy.png) |
+| \*\*Relative Energy Fluctuation ($\frac{\sigma_E}{ | \langle E \rangle                | }$) \*\*                               | 2.08                                                | $1.34 \times 10^{-6}$ | $7.91 \times 10^{-7}$ |
 
-- Euler : Energy increases exponentially over time, since it is **not** a symplectic integrator. This rules out Euler integration for this project. It has a **Relative RMS Energy Fluctuation ($\frac{\sigma_E}{|\langle E \rangle|}$) of $2.08$** which is abysmal.
-- Leapfrog: Energy is conserved over time, since it is a symplectic integrator. It has a **Relative RMS Energy Fluctuation ($\frac{\sigma_E}{|\langle E \rangle|}$) of $1.34 \times 10^{-6}$** which is very good.
-- Velocity Verlet: Energy is also conserved in this case, as it is a symplectic integrator as well. It has a **Relative RMS Energy Fluctuation ($\frac{\sigma_E}{|\langle E \rangle|}$) of $7.91 \times 10^{-7}$** which is excellent.
+- **Euler**: Energy increases exponentially over time, since it is **not** a symplectic integrator. This rules out Euler integration for this project. It has a **Relative RMS Energy Fluctuation ($\frac{\sigma_E}{|\langle E \rangle|}$) of $2.08$** which is abysmal.
+- **Leapfrog**: Energy is conserved over time, since it is a symplectic integrator. It has a **Relative RMS Energy Fluctuation ($\frac{\sigma_E}{|\langle E \rangle|}$) of $1.34 \times 10^{-6}$** which is very good.
+- **Velocity Verlet**: Energy is also conserved in this case, as it is a symplectic integrator as well. It has a **Relative RMS Energy Fluctuation ($\frac{\sigma_E}{|\langle E \rangle|}$) of $7.91 \times 10^{-7}$** which is excellent.
 
 #### Why Velocity Verlet over Leapfrog?
 
