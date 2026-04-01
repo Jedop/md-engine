@@ -9,8 +9,11 @@
 #include "Particle.hpp"
 #include "Vectors.hpp"
 
-constexpr int N = 512;
-constexpr double box = 8.976;
+constexpr int no_of_frames = 10000;
+constexpr double dt = 0.001;
+constexpr int particles_per_side = 20;
+constexpr int N = particles_per_side * particles_per_side * particles_per_side;
+constexpr double box = particles_per_side * 1.122;
 constexpr double box_r = 1 / box;
 constexpr double rc = 2.5;
 
@@ -120,8 +123,9 @@ std::tuple<double, double, double> update(std::vector<Particle> &Particles,
   double kinetic_energy = 0;
 
   for (const auto &p : Particles) {
-    double v2 = p.velocity.x * p.velocity.x + p.velocity.y * p.velocity.y +
-                p.velocity.z * p.velocity.z;
+    Vec3 v = p.velocity;
+    // v = p.velocity - p.acceleration * dt * 0.5; Leapfrog Calculation
+    double v2 = v.x * v.x + v.y * v.y + v.z * v.z;
     kinetic_energy += 0.5 * v2;
   }
 
@@ -137,7 +141,6 @@ int main() {
   std::vector<int> head(num_cells, -1);
   std::vector<int> next(N);
 
-  int particles_per_side = 8;
   double spacing = box / particles_per_side;
 
   for (int i = 0; i < particles_per_side; i++) {
@@ -157,24 +160,25 @@ int main() {
   // Particles[3].velocity = {1.0, 1.0, 1.0};
   srand(time(0));
   for (size_t i = 0; i < Particles.size(); i++) {
-    Particles[i].velocity = {((double)rand()) / RAND_MAX,
-                             ((double)rand()) / RAND_MAX,
-                             ((double)rand()) / RAND_MAX};
+    Particles[i].velocity = {((double)rand()) / RAND_MAX - 0.5,
+                             ((double)rand()) / RAND_MAX - 0.5,
+                             ((double)rand()) / RAND_MAX - 0.5};
   }
   build_cell_lists(Particles, head, next);
   auto [initial_acc, _] = compute_all_forces(Particles, head, next);
   for (size_t i = 0; i < Particles.size(); i++) {
     Particles[i].acceleration = initial_acc[i];
+    // Particles[i].velocity += Particles[i].acceleration * dt * 0.5; //
+    // Leapfrog Initialization
   }
 
   // Main Loop
-  int no_of_frames = 10000;
   std::ofstream traj_file("trajectory.xyz");
   std::ofstream data_file("thermo.dat");
   for (int i = 0; i < no_of_frames; i++) {
     std::cout << i << "\n";
     auto [potential_energy, kinetic_energy, Energy] =
-        update(Particles, head, next, 0.001);
+        update(Particles, head, next, dt);
 
     if (i % 100 == 0) {
       traj_file << Particles.size() << "\n";
