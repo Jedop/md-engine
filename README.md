@@ -28,12 +28,12 @@ To ensure physical accuracy and numerical stability, the engine implements stand
 
 ### Euler vs Leapfrog vs Velocity Verlet
 
-| Integrator                                         | Euler                            | Leapfrog                               | Velocity Verlet                                     |
-| -------------------------------------------------- | -------------------------------- | -------------------------------------- | --------------------------------------------------- | --------------------- | --------------------- |
-| **Energy over time**                               | ![Euler](assets/EulerEnergy.png) | ![Leapfrog](assets/LeapfrogEnergy.png) | ![Velocity Verlet](assets/VelocityVerletEnergy.png) |
-| \*\*Relative Energy Fluctuation ($\frac{\sigma_E}{ | \langle E \rangle                | }$) \*\*                               | 2.08                                                | $1.34 \times 10^{-6}$ | $7.91 \times 10^{-7}$ |
+| Integrator                  | Euler                            | Leapfrog                               | Velocity Verlet                                     |
+| --------------------------- | -------------------------------- | -------------------------------------- | --------------------------------------------------- |
+| **Energy over time**        | ![Euler](assets/EulerEnergy.png) | ![Leapfrog](assets/LeapfrogEnergy.png) | ![Velocity Verlet](assets/VelocityVerletEnergy.png) |
+| Relative Energy Fluctuation | 2.08                             | $1.34 \times 10^{-6}$                  | $7.91 \times 10^{-7}$                               |
 
-- **Euler** : Energy increases exponentially over time, since it is **not** a symplectic integrator. This rules out Euler integration for this project. It has a **Relative RMS Energy Fluctuation ($\frac{\sigma_E}{|\langle E \rangle|}$) of $2.08$** which is abysmal.
+- **Euler**: Energy increases exponentially over time, since it is **not** a symplectic integrator. This rules out Euler integration for this project. It has a **Relative RMS Energy Fluctuation ($\frac{\sigma_E}{|\langle E \rangle|}$) of $2.08$** which is abysmal.
 - **Leapfrog**: Energy is conserved over time, since it is a symplectic integrator. It has a **Relative RMS Energy Fluctuation ($\frac{\sigma_E}{|\langle E \rangle|}$) of $1.34 \times 10^{-6}$** which is very good.
 - **Velocity Verlet**: Energy is also conserved in this case, as it is a symplectic integrator as well. It has a **Relative RMS Energy Fluctuation ($\frac{\sigma_E}{|\langle E \rangle|}$) of $7.91 \times 10^{-7}$** which is excellent.
 
