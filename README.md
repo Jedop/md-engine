@@ -45,7 +45,7 @@ In our case, it is very clear that Velocity Verlet is the superior choice. This 
 
 ## Visualization
 
-The engine outputs raw trajectory data in the standard `.xyz` file format. This allows for seamless integration with scientific visualization software like **OVITO**.
+The engine outputs raw trajectory data in the standard `.xyz` file format. This allows for integration with scientific visualization software like **OVITO**.
 
 ## ![Output](assets/Visualization.gif)
 
