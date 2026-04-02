@@ -7,7 +7,7 @@ A 3D Molecular Dynamics Engine written in C++.
 Currently, this project implements the following
 
 - Create a 3D N body simulation framework in C++ with Periodic Boundary Conditions(PBC).
-- Implement a standard Lennard-Jones (LJ) potential to model a simple nobel gas.
+- Implement a standard Lennard-Jones (LJ) potential to model a simple noble gas.
 - Implement multiple numerical integrators, specifically: Forward Euler, Velocity Verlet, and DKD Leapfrog methods.
 
 ## Key Features
