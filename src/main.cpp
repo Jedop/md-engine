@@ -1,10 +1,10 @@
+#include "config.hpp"
 #include "simulation.hpp"
 
-int main() {
+int main(int argc, char **argv) {
+  SimConfig cfg;
 
-  SimConfig cfg = {20000, 0.001, 1, true, 20, 10, true, 1.5, true, false};
+  parse_args(argc, argv, cfg);
 
   run_simulation(cfg);
-
-  return 0;
 }

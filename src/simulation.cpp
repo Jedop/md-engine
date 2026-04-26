@@ -1,4 +1,5 @@
 #include "simulation.hpp"
+#include "utils.hpp"
 
 std::tuple<double, double, double> update(std::vector<Particle> &Particles,
                                           std::vector<int> &head,
@@ -33,7 +34,7 @@ std::tuple<double, double, double> update(std::vector<Particle> &Particles,
 }
 
 void run_simulation(SimConfig config) {
-
+  auto start = std::chrono::steady_clock::now();
   if (config.use_thermostat && config.do_time_reversal) {
     std::cout
         << "Don't try to use thermostat and do time reversal together, do "
@@ -118,9 +119,14 @@ void run_simulation(SimConfig config) {
                                  config.dt);
     }
 
-    if (step % 100 == 0) {
+    if (step % 100 == 0 && step > 0) {
 
-      std::cout << step << "\n";
+      auto now = std::chrono::steady_clock::now();
+      double elapsed = std::chrono::duration<double>(now - start).count();
+      double progress = (double)step / config.frames;
+      double eta = elapsed * (1.0 / progress - 1.0);
+      print_progress(step, config.frames, eta);
+
       traj_file << Particles.size() << "\n";
 
       traj_file << "Lattice=\"" << box << " 0.0 0.0 0.0 " << box
@@ -138,6 +144,9 @@ void run_simulation(SimConfig config) {
   }
   traj_file.close();
   data_file.close();
+
+  print_progress(config.frames, config.frames, 0);
+  std::cout << "\n";
 
   // Output Time Reversal Error
   if (config.do_time_reversal) {
