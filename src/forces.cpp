@@ -40,7 +40,8 @@ compute_all_forces(const std::vector<Particle> &Particles,
               if (j <= i) {
                 j = next[j];
                 continue;
-              }
+              } // Avoid double counting (Newton's 3rd law: F_ij = -F_ji)
+
               Vec3 r = Particles[i].position - Particles[j].position;
               r.apply_pbc(box, box_r);
               double r2 = r.x * r.x + r.y * r.y + r.z * r.z; // r^2

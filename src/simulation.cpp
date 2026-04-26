@@ -12,7 +12,7 @@ std::tuple<double, double, double> update(std::vector<Particle> &Particles,
   // 2. Rebuild the Grid
   build_cell_lists(Particles, head, next, nx, cell_size);
 
-  // 3. Synchronous Force Calculation (Calculate forces at the NEW positions)
+  // 3. Compute forces at updated positions
   auto [new_acc, potential_energy] =
       compute_all_forces(Particles, head, next, nx, cell_size, box);
 
@@ -67,8 +67,8 @@ void run_simulation(SimConfig config) {
   std::vector<int> next(Particles.size());
 
   // Files into which everything is written
-  std::ofstream traj_file("trajectory.xyz");
-  std::ofstream data_file("thermo.dat");
+  std::ofstream traj_file(config.traj_file);
+  std::ofstream data_file(config.data_file);
 
   // Initial build of cell list and other initial stuff
   build_cell_lists(Particles, head, next, nx, cell_size);

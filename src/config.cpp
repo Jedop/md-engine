@@ -2,14 +2,14 @@
 #include <iostream>
 
 void print_help() {
-  std::cout << "Usage: ./sim [options]\n\n"
+  std::cout << "Usage: ./MD_Engine [options]\n\n"
             << "--dt <value>\n"
             << "--frames <value>\n"
             << "--rho <value>\n"
             << "--fcc / --sc\n"
             << "--particles-per-side <int>\n"
             << "--unit-cells <int>\n"
-            << "--thermostat\n"
+            << "--turn-off-thermostat\n"
             << "--target-T <value>\n"
             << "--anneal\n"
             << "--time-reversal\n"
@@ -24,7 +24,7 @@ void print_config(const SimConfig &cfg) {
             << ", lattice=" << (cfg.fcc_or_not ? "FCC" : "SC")
             << ", particles_per_side=" << cfg.particles_per_side
             << ", unit_cells=" << cfg.unit_cells_per_side
-            << ", thermostat=" << cfg.use_thermostat
+            << ", turn-off-thermostat=" << cfg.use_thermostat
             << ", target_T=" << cfg.target_T
             << ", annealing=" << cfg.do_annealing
             << ", time_reversal=" << cfg.do_time_reversal
@@ -68,16 +68,16 @@ void parse_args(int argc, char **argv, SimConfig &cfg) {
     else if (arg == "--unit-cells" && i + 1 < argc)
       cfg.unit_cells_per_side = std::stoi(argv[++i]);
 
-    else if (arg == "--thermostat")
-      cfg.use_thermostat = true;
+    else if (arg == "--turn-off-thermostat")
+      cfg.use_thermostat = false;
 
-    else if (arg == "--target-T" && i + 1 < argc)
+    else if (arg == "--target-T" && i + 1 < argc) {
       cfg.target_T = std::stod(argv[++i]);
-
-    else if (arg == "--anneal")
+      cfg.use_thermostat = true;
+    } else if (arg == "--anneal") {
       cfg.do_annealing = true;
-
-    else if (arg == "--time-reversal")
+      cfg.use_thermostat = true;
+    } else if (arg == "--time-reversal")
       cfg.do_time_reversal = true;
 
     else if (arg == "--traj" && i + 1 < argc)
