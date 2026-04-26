@@ -19,9 +19,8 @@ The project uses `CMake` for building and depends on OpenMP for multithreading.
 ```bash
 git clone https://github.com/Jedop/md-engine.git
 cd md-engine
-mkdir build && cd build
-cmake ..
-make
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
 ```
 
 ### Command Line Interface (CLI)
@@ -119,6 +118,9 @@ The Velocity Verlet Method has an error of O($\Delta t^{2}$). Thus, the overall 
 
 As we can see, it follows a quadratic curve on the loglog plot, thus confirming the accuracy of our method.
 
+Note: Relative error is defined as the normalized drift in total energy:
+$\frac{|E(t) - E(0)|}{|E(0)|}$
+
 ### Time Reversal
 
 Without a thermostat, the dynamics are time-reversible. If the system is evolved forward for N timesteps and all velocities are then reversed, evolving for another N timesteps should return the system to its initial state (up to numerical error). This provides a simple diagnostic for the accuracy of the integrator.
@@ -130,8 +132,7 @@ Doing so, we get the following:
 
 which confirms that our engine obeys the laws of physics reasonably well.
 
-Note: Relative error is defined as the normalized drift in total energy:
-$\frac{|E(t) - E(0)|}{|E(0)|}$
+Note: The time-reversibility error is computed as $\max_i \|\mathbf{r}_i^{\text{final}} - \mathbf{r}_i^{\text{initial}}\|$.
 
 ### OpenMP Parallelization & Hardware Scaling
 
