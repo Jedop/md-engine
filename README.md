@@ -1,12 +1,5 @@
 # MD-Engine: A 3D C++ Molecular Dynamics Engine
 
-## Roadmap
-
-Currently porting the force-computation kernels to CUDA to enable GPU-accelerated 
-simulation of larger systems. Working through *Programming Massively Parallel 
-Processors* alongside the implementation to ensure the port is correct. Targeting a working GPU implementation 
-by mid-August 2026.
-
 ## Overview
 
 A 3D Molecular Dynamics Engine written in C++.
