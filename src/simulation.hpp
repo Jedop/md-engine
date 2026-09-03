@@ -18,6 +18,6 @@
 std::tuple<double, double, double> update(std::vector<Particle> &Particles,
                                           std::vector<int> &head,
                                           std::vector<int> &next, double dt,
-                                          int nx, double cell_size, double box);
+                                          int nx, double cell_size, double box, GpuMemory gpu_mem);
 
 void run_simulation(SimConfig config);

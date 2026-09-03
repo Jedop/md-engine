@@ -2,9 +2,11 @@
 
 // Calculates flat index of cell
 int cell_index(int ix, int iy, int iz, int nx) {
-  ix = (ix + nx) % nx;
-  iy = (iy + nx) % nx;
-  iz = (iz + nx) % nx;
+  // Safe positive modulo for C++
+  ix = (ix % nx + nx) % nx;
+  iy = (iy % nx + nx) % nx;
+  iz = (iz % nx + nx) % nx;
+  
   return ix + iy * nx + iz * nx * nx;
 }
 

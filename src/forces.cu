@@ -1,6 +1,5 @@
 #include "forces.hpp"
 #include <cuda_runtime.h>
-#include <iostream>
 
 __global__
 void compute_forces_kernel(const double* pos_x, const double* pos_y, const double* pos_z,
@@ -57,14 +56,14 @@ void compute_forces_kernel(const double* pos_x, const double* pos_y, const doubl
   acc_x[i] = fx;
   acc_y[i] = fy;
   acc_z[i] = fz;
-  atomicAdd(d_potential_energy, U);
+  d_potential_energy[i] = U;
 }
 // Computes all forces
 
 std::pair<std::vector<Vec3>, double>
 compute_all_forces(const std::vector<Particle> &Particles,
                    const std::vector<int> &head, const std::vector<int> &next,
-                   int nx, double cell_size, double box) {
+                   int nx, double cell_size, double box, GpuMemory &mem) {
    int N = Particles.size();
    double box_r = 1 / box; 
    double potential_energy = 0;
@@ -77,50 +76,60 @@ compute_all_forces(const std::vector<Particle> &Particles,
         h_pos_z[i] = Particles[i].position.z;
     }
 
-    // 2. Allocate GPU Memory (Device)
-    double *d_pos_x, *d_pos_y, *d_pos_z;
-    double *d_acc_x, *d_acc_y, *d_acc_z;
-    double *d_potential_energy;
     size_t bytes = N * sizeof(double);
     
-    cudaMalloc(&d_pos_x, bytes); cudaMalloc(&d_pos_y, bytes); cudaMalloc(&d_pos_z, bytes);
-    cudaMalloc(&d_acc_x, bytes); cudaMalloc(&d_acc_y, bytes); cudaMalloc(&d_acc_z, bytes);
-    cudaMalloc(&d_potential_energy, sizeof(double));
-
-    // 3. Copy Data to GPU
-    cudaMemcpy(d_pos_x, h_pos_x.data(), bytes, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_pos_y, h_pos_y.data(), bytes, cudaMemcpyHostToDevice);
-    cudaMemcpy(d_pos_z, h_pos_z.data(), bytes, cudaMemcpyHostToDevice);
-    // Zero out the acceleration arrays on the GPU
-    cudaMemset(d_acc_x, 0, bytes); cudaMemset(d_acc_y, 0, bytes); cudaMemset(d_acc_z, 0, bytes);
-    cudaMemset(d_potential_energy, 0, sizeof(double));
+    // 2. Copy Data to GPU
+    cudaMemcpy(mem.d_pos_x, h_pos_x.data(), bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(mem.d_pos_y, h_pos_y.data(), bytes, cudaMemcpyHostToDevice);
+    cudaMemcpy(mem.d_pos_z, h_pos_z.data(), bytes, cudaMemcpyHostToDevice);
+    cudaMemset(mem.d_acc_x, 0, bytes); 
+    cudaMemset(mem.d_acc_y, 0, bytes); 
+    cudaMemset(mem.d_acc_z, 0, bytes);
+    cudaMemset(mem.d_potential_energy, 0, bytes);
     
     // 4. Launch Kernel
     int threads = 256;
     int blocks = (N + threads - 1) / threads; // Ceiling division
-    compute_forces_kernel<<<blocks, threads>>>(d_pos_x, d_pos_y, d_pos_z, d_acc_x, d_acc_y, d_acc_z, d_potential_energy, N, box, box_r);
+    compute_forces_kernel<<<blocks, threads>>>(mem.d_pos_x, mem.d_pos_y, mem.d_pos_z, mem.d_acc_x, mem.d_acc_y, mem.d_acc_z, mem.d_potential_energy, N, box, box_r);
     
     // Wait for GPU to finish (Good for debugging)
     cudaDeviceSynchronize(); 
 
     // 5. Copy Data back to CPU
-    std::vector<double> h_acc_x(N), h_acc_y(N), h_acc_z(N);
-    cudaMemcpy(h_acc_x.data(), d_acc_x, bytes, cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_acc_y.data(), d_acc_y, bytes, cudaMemcpyDeviceToHost);
-    cudaMemcpy(h_acc_z.data(), d_acc_z, bytes, cudaMemcpyDeviceToHost);
-    cudaMemcpy(&potential_energy, d_potential_energy, sizeof(double), cudaMemcpyDeviceToHost);
-
-    // 6. Free GPU Memory
-    cudaFree(d_pos_x); cudaFree(d_pos_y); cudaFree(d_pos_z);
-    cudaFree(d_acc_x); cudaFree(d_acc_y); cudaFree(d_acc_z);
-    cudaFree(d_potential_energy);
+    std::vector<double> h_acc_x(N), h_acc_y(N), h_acc_z(N), h_pot(N);
+    cudaMemcpy(h_acc_x.data(), mem.d_acc_x, bytes, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_acc_y.data(), mem.d_acc_y, bytes, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_acc_z.data(), mem.d_acc_z, bytes, cudaMemcpyDeviceToHost);
+    cudaMemcpy(h_pot.data(), mem.d_potential_energy, bytes, cudaMemcpyDeviceToHost);
 
     // 7. Repack into C++ Vector and Return
     std::vector<Vec3> all_acc(N);
     for(int i=0; i<N; i++) {
         all_acc[i] = {h_acc_x[i], h_acc_y[i], h_acc_z[i]};
+        potential_energy += h_pot[i];
     }
 
     return {all_acc, potential_energy}; 
    }
+
+GpuMemory allocate_gpu_memory(int N) {
+    GpuMemory mem;
+    size_t bytes = N * sizeof(double);
+    
+    cudaMalloc(&mem.d_pos_x, bytes);
+    cudaMalloc(&mem.d_pos_y, bytes);
+    cudaMalloc(&mem.d_pos_z, bytes);
+    cudaMalloc(&mem.d_acc_x, bytes);
+    cudaMalloc(&mem.d_acc_y, bytes);
+    cudaMalloc(&mem.d_acc_z, bytes);
+    cudaMalloc(&mem.d_potential_energy, bytes);
+    
+    return mem;
+}
+
+void free_gpu_memory(GpuMemory &mem) {
+    cudaFree(mem.d_pos_x); cudaFree(mem.d_pos_y); cudaFree(mem.d_pos_z);
+    cudaFree(mem.d_acc_x); cudaFree(mem.d_acc_y); cudaFree(mem.d_acc_z);
+    cudaFree(mem.d_potential_energy);
+}
 

@@ -5,7 +5,7 @@ std::tuple<double, double, double> update(std::vector<Particle> &Particles,
                                           std::vector<int> &head,
                                           std::vector<int> &next, double dt,
                                           int nx, double cell_size,
-                                          double box) {
+                                          double box, GpuMemory gpu_mem) {
   // 1. Pre-Force Update (Move everyone to new positions)
   VelocityVerlet::step1(Particles, dt);
 
@@ -14,7 +14,7 @@ std::tuple<double, double, double> update(std::vector<Particle> &Particles,
 
   // 3. Compute forces at updated positions
   auto [new_acc, potential_energy] =
-      compute_all_forces(Particles, head, next, nx, cell_size, box);
+      compute_all_forces(Particles, head, next, nx, cell_size, box, gpu_mem);
 
   // 4. Post-Force Update (Finish the time step using the new forces)
   VelocityVerlet::step2(Particles, new_acc, dt);
@@ -51,6 +51,7 @@ void run_simulation(SimConfig config) {
 
   // Initialization
   std::vector<Particle> Particles;
+  GpuMemory gpu_mem = allocate_gpu_memory(Particles.size());
 
   if (config.fcc_or_not) {
     Particles = init_fcc_lattice(config.unit_cells_per_side, box);
@@ -73,7 +74,7 @@ void run_simulation(SimConfig config) {
   // Initial build of cell list and other initial stuff
   build_cell_lists(Particles, head, next, nx, cell_size);
   auto [initial_acc, _] =
-      compute_all_forces(Particles, head, next, nx, cell_size, box);
+      compute_all_forces(Particles, head, next, nx, cell_size, box, gpu_mem);
 
   for (size_t i = 0; i < Particles.size(); i++) {
 
@@ -109,7 +110,7 @@ void run_simulation(SimConfig config) {
 
     // --- CORE PHYSICS ---
     auto [pot_E, kin_E, Tot_E] =
-        update(Particles, head, next, config.dt, nx, cell_size, box);
+        update(Particles, head, next, config.dt, nx, cell_size, box, gpu_mem);
 
     // --- FEATURE: THERMOSTAT ---
     if (config.use_thermostat && !config.do_time_reversal) {
@@ -147,7 +148,7 @@ void run_simulation(SimConfig config) {
 
   print_progress(config.frames, config.frames, 0);
   std::cout << "\n";
-
+  free_gpu_memory(gpu_mem);
   // Output Time Reversal Error
   if (config.do_time_reversal) {
     double max_error = 0.0;
