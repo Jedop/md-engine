@@ -14,7 +14,8 @@ void print_help() {
             << "--anneal\n"
             << "--time-reversal\n"
             << "--traj <file>\n"
-            << "--data <file>\n";
+            << "--data <file>\n"
+            << "--backend <value>\n";
 }
 
 void print_config(const SimConfig &cfg) {
@@ -29,6 +30,7 @@ void print_config(const SimConfig &cfg) {
             << ", annealing=" << cfg.do_annealing
             << ", time_reversal=" << cfg.do_time_reversal
             << ", traj=" << cfg.traj_file << ", data=" << cfg.data_file
+            << ", gpu=" << cfg.gpu
             << "\n\n";
 }
 
@@ -80,6 +82,19 @@ void parse_args(int argc, char **argv, SimConfig &cfg) {
     } else if (arg == "--time-reversal")
       cfg.do_time_reversal = true;
 
+    else if (arg == "--backend" && i + 1 < argc) {
+        std::string backend = argv[++i];
+
+        if (backend == "gpu")
+            cfg.gpu = true;
+        else if (backend == "cpu")
+            cfg.gpu = false;
+        else {
+            std::cerr << "Error: invalid backend '" << backend
+                      << "'. Use 'cpu' or 'gpu'.\n";
+            exit(1);
+        }
+    }
     else if (arg == "--traj" && i + 1 < argc)
       cfg.traj_file = argv[++i];
 

@@ -61,9 +61,8 @@ void compute_forces_kernel(const double* pos_x, const double* pos_y, const doubl
 // Computes all forces
 
 std::pair<std::vector<Vec3>, double>
-compute_all_forces(const std::vector<Particle> &Particles,
-                   const std::vector<int> &head, const std::vector<int> &next,
-                   int nx, double cell_size, double box, GpuMemory &mem) {
+compute_all_forces_gpu(const std::vector<Particle> &Particles,
+                        double box, GpuMemory &mem) {
    int N = Particles.size();
    double box_r = 1 / box; 
    double potential_energy = 0;

@@ -13,6 +13,7 @@ struct SimConfig {
   double target_T = 1.5;
   bool do_annealing = false;
   bool do_time_reversal = false;
+  bool gpu = true;
   std::string traj_file = "trajectory.xyz";
   std::string data_file = "data.txt";
 };

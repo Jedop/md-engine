@@ -19,6 +19,10 @@ GpuMemory allocate_gpu_memory(int N);
 void free_gpu_memory(GpuMemory &mem);
 
 std::pair<std::vector<Vec3>, double>
+compute_all_forces_gpu(const std::vector<Particle> &Particles,
+                    double box, GpuMemory &mem);
+
+std::pair<std::vector<Vec3>, double>
 compute_all_forces(const std::vector<Particle> &Particles,
                    const std::vector<int> &head, const std::vector<int> &next,
-                   int nx, double cell_size, double box, GpuMemory &mem);
+                   int nx, double cell_size, double box);
