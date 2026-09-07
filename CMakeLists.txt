@@ -17,6 +17,7 @@ add_executable(MDEngine
     ${SRC_FILES}
     ${CUDA_SRC_FILES}
 )
+target_include_directories(MDEngine PUBLIC include)
 
 find_package(OpenMP REQUIRED)
 

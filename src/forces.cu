@@ -1,63 +1,143 @@
 #include "forces.hpp"
 #include <cuda_runtime.h>
+#include <thrust/device_vector.h>
+#include <thrust/sort.h>
+#include <thrust/execution_policy.h>
+
+__global__
+void find_cell_boundaries_kernel(const int* cell_ids, int* cell_start, int* cell_end, int N) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i >= N) return;
+
+    int my_cell = cell_ids[i];
+
+    if (i == 0) {
+        cell_start[my_cell] = i;
+    } else if (my_cell != cell_ids[i - 1]) {
+        cell_start[my_cell] = i;
+    }
+
+    if (i == N - 1) {
+        cell_end[my_cell] = N;
+    } else if (my_cell != cell_ids[i + 1]) {
+        cell_end[my_cell] = i + 1;
+    }
+}
+
+__global__
+void calculate_cell_ids_kernel(const double* pos_x, const double* pos_y, const double* pos_z,
+                          int* particle_indices, int* cell_ids,
+                          int N, double cell_size, int nx) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (i >= N) return;
+
+    int ix = (int(floor(pos_x[i] / cell_size)) % nx + nx) % nx;
+    int iy = (int(floor(pos_y[i] / cell_size)) % nx + nx) % nx;
+    int iz = (int(floor(pos_z[i] / cell_size)) % nx + nx) % nx;
+
+    int c_id = ix + iy * nx + iz * nx * nx;
+
+    particle_indices[i] = i;
+    cell_ids[i] = c_id;
+}
+
+__global__
+void sort_position_kernel(const double* pos_x, const double* pos_y, const double* pos_z,
+                        double* sorted_pos_x, double* sorted_pos_y, double* sorted_pos_z,
+                        int N, int* particle_indices) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (i >= N) return;
+    
+    sorted_pos_x[i] = pos_x[particle_indices[i]];
+    sorted_pos_y[i] = pos_y[particle_indices[i]];
+    sorted_pos_z[i] = pos_z[particle_indices[i]];
+}
 
 __global__
 void compute_forces_kernel(const double* pos_x, const double* pos_y, const double* pos_z,
                           double* acc_x, double* acc_y, double* acc_z, double* d_potential_energy,
-                          int N, double box, double box_r) {
+                          int* particle_indices, int* cell_ids, int* cell_start, int* cell_end,
+                          int N, double box, double box_r, int nx) {
   
-  int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (i >= N) return;
+    if (i >= N) return;
 
-  const double rc2 = 6.25;              // 2.5^2
-  const double inv_rc2 = 1.0 / rc2;
-  const double inv_rc6 = inv_rc2 * inv_rc2 * inv_rc2;
-  double U_rc = 4.0 * inv_rc6 * (inv_rc6 - 1.0);
-  
-  double my_x = pos_x[i];
-  double my_y = pos_y[i];
-  double my_z = pos_z[i];
+    const double rc2 = 6.25;              // 2.5^2
+    const double inv_rc2 = 1.0 / rc2;
+    const double inv_rc6 = inv_rc2 * inv_rc2 * inv_rc2;
+    double U_rc = 4.0 * inv_rc6 * (inv_rc6 - 1.0);
 
-  double fx = 0.0;
-  double fy = 0.0;
-  double fz = 0.0;
+    double my_x = pos_x[i];
+    double my_y = pos_y[i];
+    double my_z = pos_z[i];
+    int my_cell = cell_ids[i];
 
-  double U = 0.0;
+    double fx = 0.0;
+    double fy = 0.0;
+    double fz = 0.0;
 
-  for (int j = 0; j < N; j++) {
+    double U = 0.0;
 
-    if (i == j) continue;
+    int cz = my_cell / (nx * nx);
+    int cy = (my_cell / nx) % nx;
+    int cx = my_cell % nx;
+    
+    for (int dz = -1; dz <= 1; dz++) {
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                int n_x = (cx + dx + nx) % nx;
+                int n_y = (cy + dy + nx) % nx;
+                int n_z = (cz + dz + nx) % nx;
 
-    double dx = my_x - pos_x[j];
-    double dy = my_y - pos_y[j];
-    double dz = my_z - pos_z[j];
+                int neighbor_cell = n_x + n_y * nx + n_z * nx * nx;
 
-    dx -= box * round(dx * box_r);
-    dy -= box * round(dy * box_r);
-    dz -= box * round(dz * box_r);
+                int start = cell_start[neighbor_cell];
+                int end = cell_end[neighbor_cell];
 
-    double r2 = dx*dx + dy*dy + dz*dz;
+                if (start == -1) continue;
 
-    if (r2 < 1e-12 || r2 > 6.25) continue; // 2.5^2 = 6.25
+                for (int j = start; j < end; j++) {
+                    if (i == j) continue; // Don't interact with yourself
+                    
+                            double dx = my_x - pos_x[j];
+                            double dy = my_y - pos_y[j];
+                            double dz = my_z - pos_z[j];
 
-    double inv_r2 = 1.0 / r2;
-    double inv_r6 = inv_r2 * inv_r2 * inv_r2;
+                            dx -= box * round(dx * box_r);
+                            dy -= box * round(dy * box_r);
+                            dz -= box * round(dz * box_r);
 
-    // Lennard-Jones Force magnitude
-    double f_mag = 24.0 * inv_r2 * inv_r6 * (2.0 * inv_r6 - 1.0);
-    U += 0.5 * (4.0 * inv_r6 * (inv_r6 - 1.0) - U_rc);
+                            double r2 = dx*dx + dy*dy + dz*dz;
 
-    fx += dx * f_mag;
-    fy += dy * f_mag;
-    fz += dz * f_mag;
-  }
+                            if (r2 < 1e-12 || r2 > 6.25) continue; // 2.5^2 = 6.25
 
-  acc_x[i] = fx;
-  acc_y[i] = fy;
-  acc_z[i] = fz;
-  d_potential_energy[i] = U;
-}
+                            double inv_r2 = 1.0 / r2;
+                            double inv_r6 = inv_r2 * inv_r2 * inv_r2;
+
+                            // Lennard-Jones Force magnitude
+                            double f_mag = 24.0 * inv_r2 * inv_r6 * (2.0 * inv_r6 - 1.0);
+                            U += 0.5 * (4.0 * inv_r6 * (inv_r6 - 1.0) - U_rc);
+
+                            fx += dx * f_mag;
+                            fy += dy * f_mag;
+                            fz += dz * f_mag;
+                }
+            }
+        }
+    }
+
+
+    int original_idx = particle_indices[i];
+
+
+    acc_x[original_idx] = fx;
+    acc_y[original_idx] = fy;
+    acc_z[original_idx] = fz;
+    d_potential_energy[original_idx] = U;
+    }
 // Computes all forces
 
 std::pair<std::vector<Vec3>, double>
@@ -89,7 +169,35 @@ compute_all_forces_gpu(const std::vector<Particle> &Particles,
     // 4. Launch Kernel
     int threads = 256;
     int blocks = (N + threads - 1) / threads; // Ceiling division
-    compute_forces_kernel<<<blocks, threads>>>(mem.d_pos_x, mem.d_pos_y, mem.d_pos_z, mem.d_acc_x, mem.d_acc_y, mem.d_acc_z, mem.d_potential_energy, N, box, box_r);
+    const int nx = int(box / rc);
+    const double cell_size = box / nx;
+    const int num_cells = nx * nx * nx;
+
+    calculate_cell_ids_kernel<<<blocks, threads>>>(mem.d_pos_x, mem.d_pos_y, mem.d_pos_z, mem.d_particle_indices, mem.d_cell_ids, N, cell_size, nx);
+
+    cudaDeviceSynchronize();
+    
+    thrust::sort_by_key(thrust::device, 
+                        mem.d_cell_ids, mem.d_cell_ids + N, 
+                        mem.d_particle_indices);
+
+    sort_position_kernel<<<blocks, threads>>>(mem.d_pos_x, mem.d_pos_y, mem.d_pos_z, mem.d_sorted_pos_x, mem.d_sorted_pos_y, mem.d_sorted_pos_z, N, mem.d_particle_indices);
+    
+    cudaDeviceSynchronize();
+    
+    cudaMemset(mem.d_cell_start, 0xff, num_cells * sizeof(int));
+    cudaMemset(mem.d_cell_end, 0xff, num_cells * sizeof(int));
+
+    find_cell_boundaries_kernel<<<blocks, threads>>>(mem.d_cell_ids, 
+                                                     mem.d_cell_start, mem.d_cell_end, 
+                                                     N);
+
+    cudaDeviceSynchronize();
+
+    compute_forces_kernel<<<blocks, threads>>>(mem.d_sorted_pos_x, mem.d_sorted_pos_y, mem.d_sorted_pos_z, 
+        mem.d_acc_x, mem.d_acc_y, mem.d_acc_z, 
+        mem.d_potential_energy, mem.d_particle_indices, mem.d_cell_ids, mem.d_cell_start, mem.d_cell_end,
+        N, box, box_r, nx);
     
     // Wait for GPU to finish (Good for debugging)
     cudaDeviceSynchronize(); 
@@ -111,24 +219,39 @@ compute_all_forces_gpu(const std::vector<Particle> &Particles,
     return {all_acc, potential_energy}; 
    }
 
-GpuMemory allocate_gpu_memory(int N) {
+GpuMemory allocate_gpu_memory(int N, int num_cells) {
     GpuMemory mem;
     size_t bytes = N * sizeof(double);
-    
+    size_t int_bytes = N * sizeof(int);
+    size_t cell_bytes = num_cells * sizeof(int);
+
     cudaMalloc(&mem.d_pos_x, bytes);
     cudaMalloc(&mem.d_pos_y, bytes);
     cudaMalloc(&mem.d_pos_z, bytes);
+    cudaMalloc(&mem.d_sorted_pos_x, bytes);
+    cudaMalloc(&mem.d_sorted_pos_y, bytes);
+    cudaMalloc(&mem.d_sorted_pos_z, bytes);
     cudaMalloc(&mem.d_acc_x, bytes);
     cudaMalloc(&mem.d_acc_y, bytes);
     cudaMalloc(&mem.d_acc_z, bytes);
     cudaMalloc(&mem.d_potential_energy, bytes);
+    cudaMalloc(&mem.d_particle_indices, int_bytes);
+    cudaMalloc(&mem.d_cell_ids, int_bytes);
+    cudaMalloc(&mem.d_cell_start, cell_bytes);
+    cudaMalloc(&mem.d_cell_end, cell_bytes);
     
     return mem;
 }
 
 void free_gpu_memory(GpuMemory &mem) {
     cudaFree(mem.d_pos_x); cudaFree(mem.d_pos_y); cudaFree(mem.d_pos_z);
+    cudaFree(mem.d_sorted_pos_x); cudaFree(mem.d_sorted_pos_y); cudaFree(mem.d_sorted_pos_z);
     cudaFree(mem.d_acc_x); cudaFree(mem.d_acc_y); cudaFree(mem.d_acc_z);
     cudaFree(mem.d_potential_energy);
+
+    cudaFree(mem.d_particle_indices);
+    cudaFree(mem.d_cell_ids);
+    cudaFree(mem.d_cell_start);
+    cudaFree(mem.d_cell_end);
 }
 

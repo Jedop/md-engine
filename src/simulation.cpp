@@ -5,7 +5,7 @@ std::tuple<double, double, double> update(std::vector<Particle> &Particles,
                                           std::vector<int> &head,
                                           std::vector<int> &next, double dt,
                                           int nx, double cell_size,
-                                          double box, GpuMemory gpu_mem, bool use_gpu) {
+                                          double box, GpuMemory &gpu_mem, bool use_gpu) {
   // Pre-Force Update (Move everyone to new positions)
   VelocityVerlet::step1(Particles, dt);
   
@@ -70,7 +70,7 @@ void run_simulation(SimConfig config) {
 
   GpuMemory gpu_mem;
   if (config.gpu) {
-      gpu_mem = allocate_gpu_memory(Particles.size());
+      gpu_mem = allocate_gpu_memory(Particles.size(), num_cells);
   }
 
   // head and next vectors act as linked list
@@ -100,6 +100,17 @@ void run_simulation(SimConfig config) {
     // Leapfrog Initialization
     // Particles[i].velocity += Particles[i].acceleration * dt * 0.5;
   }
+
+  std::cout << "Starting Equilibration Phase (2000 steps)...\n";
+  for (int eq_step = 0; eq_step < 2000; eq_step++) {
+      // Just run the physics and thermostat, NO file logging!
+      auto [pot_E, kin_E, Tot_E] = update(Particles, head, next, config.dt, nx, cell_size, box, gpu_mem, config.gpu);
+      if (config.use_thermostat) {
+          double T_current = (2 * kin_E) / (3 * Particles.size());
+          apply_berendsen_thermostat(Particles, T_current, config.target_T, config.dt);
+      }
+  }
+  std::cout << "Equilibration Complete. Starting Main Loop.\n";
 
   // Recording initial positions in case of time reversal
   std::vector<Vec3> initial_positions(Particles.size());

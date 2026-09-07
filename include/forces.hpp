@@ -11,11 +11,18 @@
 
 struct GpuMemory {
     double *d_pos_x, *d_pos_y, *d_pos_z;
+    double *d_sorted_pos_x, *d_sorted_pos_y, *d_sorted_pos_z;
     double *d_acc_x, *d_acc_y, *d_acc_z;
     double *d_potential_energy;
+
+    int *d_particle_indices;
+    int *d_cell_ids;
+
+    int *d_cell_start;
+    int *d_cell_end;
 };
 
-GpuMemory allocate_gpu_memory(int N);
+GpuMemory allocate_gpu_memory(int N, int num_cells);
 void free_gpu_memory(GpuMemory &mem);
 
 std::pair<std::vector<Vec3>, double>
