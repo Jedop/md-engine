@@ -1,23 +1,18 @@
 # MD-Engine: A 3D C++ Molecular Dynamics Engine
 
-## Roadmap
-
-Currently porting the force-computation kernels to CUDA to enable GPU-accelerated 
-simulation of larger systems. Working through *Programming Massively Parallel 
-Processors* alongside the implementation to ensure the port is correct. Targeting a working GPU implementation 
-by mid-August 2026.
-
 ## Overview
 
-A 3D Molecular Dynamics Engine written in C++.
+A 3D Molecular Dynamics Engine written in C++, which can simulate 1M particles in minutes(~217s).
 
 Currently, this project implements the following
 
-- Create a 3D N body simulation framework in C++ with Periodic Boundary Conditions(PBC).
-- Implement a standard Lennard-Jones (LJ) potential to model a simple noble gas.
-- Implement multiple numerical integrators, specifically: Forward Euler, Velocity Verlet, and DKD Leapfrog methods.
+- A 3D N body simulation framework in C++ with Periodic Boundary Conditions(PBC).
+- A standard Lennard-Jones (LJ) potential to model a simple noble gas.
+- Multiple numerical integrators, specifically: Forward Euler, Velocity Verlet, and DKD Leapfrog methods.
 - Parallelization using OpenMP
 - Simulate distinct thermodynamic ensembles (NVE and NVT) using custom thermostats to model macroscopic phase transitions.
+- Dual Backend, meaning one can switch from CPU execution to GPU execution by passing a parameter to the executable.
+- Mixed Precision Architecture on the GPU, due to consumer GPU's having significantly less FP64 computing capabilities.
 
 ## Quick Start & Installation
 
@@ -57,8 +52,8 @@ Usage: ./MD_Engine [options]
 --unit-cells <int>
     Number of FCC unit cells per dimension (used for FCC lattice)
 
---turn-off-thermostat
-    Disable Berendsen thermostat (switches from NVT → NVE ensemble)
+--thermostat
+    Enable/Disable Berendsen thermostat (switches from NVT → NVE ensemble)
 
 --target-T <value>
     Target temperature for thermostat (in LJ reduced units)
@@ -75,6 +70,12 @@ Usage: ./MD_Engine [options]
 
 --data <file>
     Output thermodynamic data file (energy, temperature, etc.)
+
+--backend <value>
+    gpu to use the GPU, cpu to use the CPU
+
+--eq-steps <value>
+    Runs a <value> number of equilibrium steps where data is not recorded.
 ```
 
 ### Output
@@ -87,6 +88,9 @@ It outputs two files, a .xyz file and .dat file. The xyz file contains the raw p
 - **OpenMP Parallelization**: Utilizes lock-free, thread-local array reductions to eliminate data races, achieving a ~5x speedup (simulating 8,000 particles for 10,000 timesteps in ~90 seconds).
 - **Thermodynamic Control**: Features Velocity Rescaling and Berendsen thermostats for precise temperature manipulation and NVT ensemble sampling.
 - **Multiple Integrators**: This enables comparison and numerical analyses of various methods of integration.
+- **Multiple Backends**: Allows the user to use either the GPU(only NVIDIA GPUs) or the CPU.
+- **Spatial Hashing**: Analogous to the Cell linked lists on the CPU, implements cells in the GPU, sorts the particles according to the Cell IDs, and calculates the forces. Optimizes from $O(N^2)$ to $O(N)$.
+- **Mixed Precision Architecture**: The GPU uses Mixed Precision due to consumer NVIDIA GPUs having a significantly lower number of FP64 cores. The CPU remains on fully double precision architecture.
 
 ## Physics & Implementation Details
 
@@ -100,6 +104,17 @@ To ensure physical accuracy and numerical stability, the engine implements stand
 
 ## Numerical Analysis
 
+> **Benchmark note:** The performance numbers reported below were measured on my local hardware and will vary depending on the CPU, GPU, memory, drivers, and system load.
+
+### Benchmark Hardware
+
+- **CPU:** 12th Gen Intel Core i7-12650H
+- **GPU:** NVIDIA GeForce RTX 3070 Ti Laptop GPU (8 GB VRAM)
+- **RAM:** 16 GB
+- **NVIDIA Driver:** 610.43.03
+- **CUDA:** 13.2
+- **OS:** EndeavourOS Linux
+
 ### Euler vs Leapfrog vs Velocity Verlet
 
 | Integrator                  | Euler                            | Leapfrog                               | Velocity Verlet                                     |
@@ -110,6 +125,10 @@ To ensure physical accuracy and numerical stability, the engine implements stand
 - **Euler**: Energy increases exponentially over time, since it is **not** a symplectic integrator. This rules out Euler integration for this project. It has a **Relative RMS Energy Fluctuation ($\frac{\sigma_E}{|\langle E \rangle|}$) of $2.08$** which is abysmal.
 - **Leapfrog**: Energy is conserved over time, since it is a symplectic integrator. It has a **Relative RMS Energy Fluctuation ($\frac{\sigma_E}{|\langle E \rangle|}$) of $1.34 \times 10^{-6}$** which is very good.
 - **Velocity Verlet**: Energy is also conserved in this case, as it is a symplectic integrator as well. It has a **Relative RMS Energy Fluctuation ($\frac{\sigma_E}{|\langle E \rangle|}$) of $7.91 \times 10^{-7}$** which is excellent.
+
+> *Update: The above metrics were benchmarked on an older version of the repository. The current error for Velocity Verlet is always of the order $< 10^{-15}$*
+
+> *Note: The above metrics were benchmarked on the CPU backend (FP64). The GPU backend utilizes a Mixed-Precision architecture (FP32 forces, FP64 accumulation) to bypass consumer hardware FP64 throttling. Despite the use of single-precision for intermediate distances, the GPU engine maintains an exceptional Relative RMS Energy Fluctuation of $< 10^{-15}$ in the NVE ensemble.*
 
 #### Why Velocity Verlet over Leapfrog?
 
@@ -141,6 +160,8 @@ which confirms that our engine obeys the laws of physics reasonably well.
 
 Note: The time-reversibility error is computed as $\max_i \|\mathbf{r}_i^{\text{final}} - \mathbf{r}_i^{\text{initial}}\|$.
 
+> *Note: The above metrics were benchmarked on the CPU backend (FP64). The GPU backend performs similarly, resulting in a $< 10^{-15}$ error for 2k timesteps and ~$10^{-6}$ error for 20k timesteps. This is because of the Mixed Precision Architecture used in the GPU, more specifically, FP32 truncation.*
+
 ### OpenMP Parallelization & Hardware Scaling
 
 To address the $O(N)$ force-calculation bottleneck, the engine was parallelized using **OpenMP**.
@@ -150,7 +171,21 @@ Instead, the engine utilizes a thread-local 2D accumulation array (`thread_acc[n
 
 ![OpenMP Scaling](assets/omp_scaling.png)
 
-As shown in the hardware scaling benchmark, this architecture yields a **5x linear speedup** (dropping execution time from 6.5 minutes to ~1.5 minutes for large systems), successfully saturating the physical P-Cores and memory bandwidth of the deployment hardware.
+As shown in the hardware scaling benchmark, this architecture yields a **5x linear speedup** (dropping execution time from 6.5 minutes to ~1.5 minutes for large systems).
+
+## CUDA Parallelization
+
+To get an even more performant engine, a fully data-resident **CUDA** backend was developed. A naive GPU port suffers from two fatal bottlenecks: PCIe bus transfer latency and uncoalesced memory reads caused by standard CPU-style linked lists.
+
+To resolve this, the GPU engine implements **Spatial Hashing**. Particles are assigned 3D cell IDs and physically sorted in VRAM using **NVIDIA Thrust** (`thrust::sort_by_key`). This guarantees contiguous, coalesced memory access patterns for GPU warps during $O(N)$ neighbor list traversal, keeping the entire simulation locked on the device.
+
+Furthermore, to bypass the severe FP64 (Double Precision) hardware throttling on consumer NVIDIA GPUs, the engine utilizes a custom **Mixed-Precision** pipeline:
+- Pairwise distances and Lennard-Jones forces are computed in **Single Precision (FP32)**.
+- Position/Velocity integration and global energy reductions (via parallel `thrust::reduce` trees) are accumulated in **Double Precision (FP64)**, successfully maintaining exact macroscopic energy conservation.
+
+![CPU vs GPU Scaling](assets/cpu_vs_gpu_scaling.png)
+
+As shown in the scaling benchmark, The CUDA implementation scales substantially better with increasing particle count. For a mid-sized system of 32,000 particles, the GPU achieves a **~19x execution speedup** (7 seconds vs. 136 seconds). However, the true hardware scaling is revealed at macroscopic limits: For 1,000,188 particles over 10,000 timesteps, the GPU completes the simulation in 217 s (3.6 min). The CPU runtime is projected at approximately 4,783 s (80 min) based on the runtime estimate from an interrupted run, corresponding to an estimated ~22× speedup. This is all while maintaining an  $< 10^{-15}$ error on global energy conservation.
 
 ## Thermodynamics & Phase Transitions
 
