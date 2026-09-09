@@ -2,32 +2,31 @@
 
 // Calculates flat index of cell
 int cell_index(int ix, int iy, int iz, int nx) {
-  // Safe positive modulo for C++
-  ix = (ix % nx + nx) % nx;
-  iy = (iy % nx + nx) % nx;
-  iz = (iz % nx + nx) % nx;
-  
-  return ix + iy * nx + iz * nx * nx;
+    // Safe positive modulo for C++
+    ix = (ix % nx + nx) % nx;
+    iy = (iy % nx + nx) % nx;
+    iz = (iz % nx + nx) % nx;
+
+    return ix + iy * nx + iz * nx * nx;
 }
 
 // Calculates cell index given position
-std::tuple<int, int, int> get_cell(const Vec3 &p, double cell_size) {
-  int ix = int(std::floor(p.x / cell_size));
-  int iy = int(std::floor(p.y / cell_size));
-  int iz = int(std::floor(p.z / cell_size));
-  return {ix, iy, iz};
+std::tuple<int, int, int> get_cell(const Vec3& p, double cell_size) {
+    int ix = int(std::floor(p.x / cell_size));
+    int iy = int(std::floor(p.y / cell_size));
+    int iz = int(std::floor(p.z / cell_size));
+    return {ix, iy, iz};
 }
 
 // Builds the cell linked lists
-void build_cell_lists(const std::vector<Particle> &Particles,
-                      std::vector<int> &head, std::vector<int> &next, int nx,
-                      double cell_size) {
-  std::fill(head.begin(), head.end(), -1);
+void build_cell_lists(const std::vector<Particle>& Particles, std::vector<int>& head,
+                      std::vector<int>& next, int nx, double cell_size) {
+    std::fill(head.begin(), head.end(), -1);
 
-  for (size_t i = 0; i < Particles.size(); i++) {
-    auto [cx, cy, cz] = get_cell(Particles[i].position, cell_size);
-    int c = cell_index(cx, cy, cz, nx);
-    next[i] = head[c];
-    head[c] = i;
-  }
+    for (size_t i = 0; i < Particles.size(); i++) {
+        auto [cx, cy, cz] = get_cell(Particles[i].position, cell_size);
+        int c = cell_index(cx, cy, cz, nx);
+        next[i] = head[c];
+        head[c] = i;
+    }
 }
