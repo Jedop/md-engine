@@ -1,4 +1,4 @@
-# MD-Engine: A 3D C++ Molecular Dynamics Engine
+# MD-Engine: A 3D CUDA C++ Molecular Dynamics Engine
 
 ## Overview
 
