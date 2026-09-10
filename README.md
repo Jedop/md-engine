@@ -183,7 +183,7 @@ Furthermore, to bypass the severe FP64 (Double Precision) hardware throttling on
 
 ![CPU vs GPU Scaling](assets/cpu_vs_gpu_scaling.png)
 
-As shown in the scaling benchmark, The CUDA implementation scales substantially better with increasing particle count. For a mid-sized system of 32,000 particles, the GPU achieves a **~19x execution speedup** (4.87 seconds vs. 136 seconds). However, the true hardware scaling is revealed at macroscopic limits: For 1,000,188 particles over 10,000 timesteps, the GPU completes the simulation in 120.59 s (2 min). The CPU runtime is projected at approximately 4,783 s (80 min) based on the runtime estimate from an interrupted run, corresponding to an estimated ~39.7× speedup. This is all while maintaining an  $< 10^{-7}$ error on global energy conservation.
+As shown in the scaling benchmark, The CUDA implementation scales substantially better with increasing particle count. For a mid-sized system of 32,000 particles, the GPU achieves a **~28x execution speedup** (4.87 seconds vs. 136 seconds). However, the true hardware scaling is revealed at macroscopic limits: For 1,000,188 particles over 10,000 timesteps, the GPU completes the simulation in 120.59 s (2 min). The CPU runtime is projected at approximately 4,783 s (80 min) based on the runtime estimate from an interrupted run, corresponding to an estimated ~39.7× speedup. This is all while maintaining an  $< 10^{-7}$ error on global energy conservation.
 
 ### Hardware Profiling & Bottleneck Analysis (NVIDIA Nsight Compute)
 
