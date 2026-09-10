@@ -44,13 +44,13 @@ void calculate_cell_ids_kernel(const double* pos_x, const double* pos_y, const d
 // Sorts the positions according to the particle indices, so we can do spatial hashing to calculate the forces easily
 __global__
 void sort_position_kernel(const double* pos_x, const double* pos_y, const double* pos_z,
-                        double* sorted_pos_x, double* sorted_pos_y, double* sorted_pos_z,
+                        float* sorted_pos_x, float* sorted_pos_y, float* sorted_pos_z,
                         int N, int* particle_indices) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     
     if (i >= N) return;
     
-    sorted_pos_x[i] = pos_x[particle_indices[i]];
-    sorted_pos_y[i] = pos_y[particle_indices[i]];
-    sorted_pos_z[i] = pos_z[particle_indices[i]];
+    sorted_pos_x[i] = (float)pos_x[particle_indices[i]];
+    sorted_pos_y[i] = (float)pos_y[particle_indices[i]];
+    sorted_pos_z[i] = (float)pos_z[particle_indices[i]];
 }

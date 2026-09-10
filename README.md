@@ -2,7 +2,7 @@
 
 ## Overview
 
-A 3D Molecular Dynamics Engine written in C++, which can simulate 1M particles in minutes(~217s).
+A 3D Molecular Dynamics Engine written in C++, which can simulate 1M particles in minutes(~121s).
 
 Currently, this project implements the following
 
@@ -80,15 +80,15 @@ Usage: ./MD_Engine [options]
 
 ### Output
 
-It outputs two files, a .xyz file and .dat file. The xyz file contains the raw positions of the particles at each timestep, and the .dat file contains the Potential Energy U, the Kinetic Energy T, the Total Energy E, and the Temperature T.
+It outputs two files, a .xyz file and .dat file. The xyz file contains the raw positions of the particles at each timestep, and the .dat file contains the Potential Energy U, the Kinetic Energy K, the Total Energy E, and the Temperature T.
 
 ## Key Features
 
-- **Cell lists**: Divides the space into cubes to optimize the Force Calculation Algorithm from $O(N^2)$ to $O(N)$, enabling simulation of 8000 particles for 10,000 timesteps in 170s.
-- **OpenMP Parallelization**: Utilizes lock-free, thread-local array reductions to eliminate data races, achieving a ~5x speedup (simulating 8,000 particles for 10,000 timesteps in ~90 seconds).
+- **GPU + CPU Backends**: Allows the user to use either the GPU(only NVIDIA GPUs) or the CPU.
+- **Cell lists**: Divides the space into cubes to optimize the Force Calculation Algorithm from $O(N^2)$ to $O(N)$, enabling simulation of 8000 particles for 10,000 timesteps in 170s, on the CPU, without Parallelization.
+- **OpenMP Parallelization**: Utilizes lock-free, thread-local array reductions to eliminate data races, achieving a ~5x speedup (simulating 8,000 particles for 10,000 timesteps in ~36 seconds) on the CPU.
 - **Thermodynamic Control**: Features Velocity Rescaling and Berendsen thermostats for precise temperature manipulation and NVT ensemble sampling.
 - **Multiple Integrators**: This enables comparison and numerical analyses of various methods of integration.
-- **Multiple Backends**: Allows the user to use either the GPU(only NVIDIA GPUs) or the CPU.
 - **Spatial Hashing**: Analogous to the Cell linked lists on the CPU, implements cells in the GPU, sorts the particles according to the Cell IDs, and calculates the forces. Optimizes from $O(N^2)$ to $O(N)$.
 - **Mixed Precision Architecture**: The GPU uses Mixed Precision due to consumer NVIDIA GPUs having a significantly lower number of FP64 cores. The CPU remains on fully double precision architecture.
 
@@ -126,9 +126,7 @@ To ensure physical accuracy and numerical stability, the engine implements stand
 - **Leapfrog**: Energy is conserved over time, since it is a symplectic integrator. It has a **Relative RMS Energy Fluctuation ($\frac{\sigma_E}{|\langle E \rangle|}$) of $1.34 \times 10^{-6}$** which is very good.
 - **Velocity Verlet**: Energy is also conserved in this case, as it is a symplectic integrator as well. It has a **Relative RMS Energy Fluctuation ($\frac{\sigma_E}{|\langle E \rangle|}$) of $7.91 \times 10^{-7}$** which is excellent.
 
-> *Update: The above metrics were benchmarked on an older version of the repository. The current error for Velocity Verlet is always of the order $< 10^{-15}$*
-
-> *Note: The above metrics were benchmarked on the CPU backend (FP64). The GPU backend utilizes a Mixed-Precision architecture (FP32 forces, FP64 accumulation) to bypass consumer hardware FP64 throttling. Despite the use of single-precision for intermediate distances, the GPU engine maintains an exceptional Relative RMS Energy Fluctuation of $< 10^{-15}$ in the NVE ensemble.*
+> *Note: The above metrics were benchmarked on the CPU backend (FP64). The GPU backend utilizes a Mixed-Precision architecture (FP32 forces, FP64 accumulation) to bypass consumer hardware FP64 throttling. Despite the use of single-precision for intermediate distances, the GPU engine maintains an Relative RMS Energy Fluctuation of $< 10^{-7}$ in the NVE ensemble.*
 
 #### Why Velocity Verlet over Leapfrog?
 
@@ -177,7 +175,7 @@ As shown in the hardware scaling benchmark, this architecture yields a **5x line
 
 To get an even more performant engine, a fully data-resident **CUDA** backend was developed. A naive GPU port suffers from two fatal bottlenecks: PCIe bus transfer latency and uncoalesced memory reads caused by standard CPU-style linked lists.
 
-To resolve this, the GPU engine implements **Spatial Hashing**. Particles are assigned 3D cell IDs and physically sorted in VRAM using **NVIDIA Thrust** (`thrust::sort_by_key`). This guarantees contiguous, coalesced memory access patterns for GPU warps during $O(N)$ neighbor list traversal, keeping the entire simulation locked on the device.
+To resolve this, the GPU engine implements **Spatial Hashing**. Particles are assigned 3D cell IDs and physically sorted in VRAM using **NVIDIA Thrust** (`thrust::sort_by_key`). This improves spatial locality during GPU neighbor-list traversal by physically grouping particles belonging to the same cell in VRAM.
 
 Furthermore, to bypass the severe FP64 (Double Precision) hardware throttling on consumer NVIDIA GPUs, the engine utilizes a custom **Mixed-Precision** pipeline:
 - Pairwise distances and Lennard-Jones forces are computed in **Single Precision (FP32)**.
@@ -185,14 +183,33 @@ Furthermore, to bypass the severe FP64 (Double Precision) hardware throttling on
 
 ![CPU vs GPU Scaling](assets/cpu_vs_gpu_scaling.png)
 
-As shown in the scaling benchmark, The CUDA implementation scales substantially better with increasing particle count. For a mid-sized system of 32,000 particles, the GPU achieves a **~19x execution speedup** (7 seconds vs. 136 seconds). However, the true hardware scaling is revealed at macroscopic limits: For 1,000,188 particles over 10,000 timesteps, the GPU completes the simulation in 217 s (3.6 min). The CPU runtime is projected at approximately 4,783 s (80 min) based on the runtime estimate from an interrupted run, corresponding to an estimated ~22× speedup. This is all while maintaining an  $< 10^{-15}$ error on global energy conservation.
+As shown in the scaling benchmark, The CUDA implementation scales substantially better with increasing particle count. For a mid-sized system of 32,000 particles, the GPU achieves a **~19x execution speedup** (4.87 seconds vs. 136 seconds). However, the true hardware scaling is revealed at macroscopic limits: For 1,000,188 particles over 10,000 timesteps, the GPU completes the simulation in 120.59 s (2 min). The CPU runtime is projected at approximately 4,783 s (80 min) based on the runtime estimate from an interrupted run, corresponding to an estimated ~39.7× speedup. This is all while maintaining an  $< 10^{-7}$ error on global energy conservation.
+
+### Hardware Profiling & Bottleneck Analysis (NVIDIA Nsight Compute)
+
+To validate the CUDA architecture and identify hardware-level bottlenecks, the engine was profiled using NVIDIA Nsight Compute (`ncu`) on an RTX 3070 Ti Laptop GPU.
+
+**Key Telemetry (1,000,000 particles, Mixed Precision):**
+*   **Compute (SM) Throughput:** 88.85%
+*   **Memory (DRAM) Throughput:** 3.50%
+*   **L1/TEX Cache Throughput:** 39.05%
+*   **Achieved Occupancy:** 91.85%
+
+**1. Memory Bandwidth Is Not the Bottleneck:**
+Naive GPU molecular dynamics is typically memory-bound due to pointer-chasing and uncoalesced VRAM reads. The profiling telemetry confirms that the **Spatial Hashing** and physical memory sorting (via `thrust::sort_by_key`) successfully mitigated this. The DRAM throughput sits at an idle 3.50%, proving that memory latency is no longer the bottleneck. That said, the access pattern itself isn't fully optimal: `ncu` flags uncoalesced global loads (only ~4.2 of 32 bytes/sector utilized) and stores (~19.3 of 32), together representing an estimated 15–33% further speedup if resolved
+
+**2. The Compute Wall (FP32 vs FP64):**
+With the memory bottleneck removed, the engine is strictly **Compute-Bound** (SM Throughput at ~89%). The profiler explicitly highlighted the hardware limitation of consumer gaming GPUs: the FP32 to FP64 performance ratio is artificially locked to `64:1`. Simulating pure FP64 resulted in severe pipeline stalling. The **Mixed-Precision** pipeline (calculating local pair-forces in FP32, accumulating global energies in FP64) successfully bypassed this hardware issue. Another issue faced was: despite the force kernel executing zero FP64 *arithmetic* instructions, the FP64 pipe was still ~98% active, caused by implicit `double -> float` conversions occurring once per neighbor-pair inside the cell rather than once per particle. Since FP32:FP64 throughput is locked at 64:1 on my hardware, even conversion traffic is expensive. Rewriting the sorted-position arrays to store natively as `float` (resulting in conversion from double to float once per particle, instead of once per pair) eliminated this, after which the kernel became FP32-bound, doing its intended job of avoiding the FP64 throttle while preserving macroscopic energy conservation.
+
+**3. Future Optimizations (Thread Divergence):**
+Instruction-level profiling revealed that average active threads per warp sit at `22.80 / 32`. This is likely caused by the irregular amount of neighbor work performed by different particles and divergent cutoff/predicate paths during cell-list traversal. Future architectural updates will implement **Verlet Neighbor Lists** on top of the spatial hash to densely pack interacting pairs and eliminate warp divergence.
 
 ## Thermodynamics & Phase Transitions
 
 To simulate specific states of matter, the engine supports transitioning from an isolated **NVE (Microcanonical) ensemble** to a thermally controlled **NVT (Canonical) ensemble** via custom thermostats.
 
-- **Velocity Rescaling:** Forces instantaneous temperature convergence, but artificially suppresses natural kinetic energy fluctuations (creating an non-physical isokinetic ensemble).
-- **Berendsen Thermostat:** Weakly couples the system to an external heat bath with a time constant $\tau$. This allows for smooth, physically realistic equilibration and energy transfer.
+- **Velocity Rescaling:** Forces instantaneous temperature convergence, but artificially suppresses natural kinetic energy fluctuations (creating a non-physical isokinetic ensemble).
+- **Berendsen Thermostat:** Weakly couples the system to an external heat bath with a time constant $\tau$. This allows for smooth temperature equilibration and energy transfer.
 
 ### Radial Distribution Function (RDF)
 

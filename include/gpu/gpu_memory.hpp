@@ -5,7 +5,7 @@
 
 struct GpuMemory {
     double *d_pos_x, *d_pos_y, *d_pos_z;
-    double *d_sorted_pos_x, *d_sorted_pos_y, *d_sorted_pos_z;
+    float *d_sorted_pos_x, *d_sorted_pos_y, *d_sorted_pos_z;
     double *d_vel_x, *d_vel_y, *d_vel_z;
     double *d_acc_x, *d_acc_y, *d_acc_z;
     double *d_potential_energy;

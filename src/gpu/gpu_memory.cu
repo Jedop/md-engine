@@ -7,13 +7,14 @@ GpuMemory allocate_gpu_memory(int N, int num_cells) {
     size_t bytes = N * sizeof(double);
     size_t int_bytes = N * sizeof(int);
     size_t cell_bytes = num_cells * sizeof(int);
+    size_t float_bytes = N * sizeof(float);
 
     cudaMalloc(&mem.d_pos_x, bytes);
     cudaMalloc(&mem.d_pos_y, bytes);
     cudaMalloc(&mem.d_pos_z, bytes);
-    cudaMalloc(&mem.d_sorted_pos_x, bytes);
-    cudaMalloc(&mem.d_sorted_pos_y, bytes);
-    cudaMalloc(&mem.d_sorted_pos_z, bytes);
+    cudaMalloc(&mem.d_sorted_pos_x, float_bytes);
+    cudaMalloc(&mem.d_sorted_pos_y, float_bytes);
+    cudaMalloc(&mem.d_sorted_pos_z, float_bytes);
     cudaMalloc(&mem.d_vel_x, bytes);
     cudaMalloc(&mem.d_vel_y, bytes);
     cudaMalloc(&mem.d_vel_z, bytes);

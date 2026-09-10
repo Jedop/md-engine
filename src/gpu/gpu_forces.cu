@@ -8,7 +8,7 @@
 
 // Calculates the forces on the GPU
 __global__
-void compute_forces_kernel(const double* pos_x, const double* pos_y, const double* pos_z,
+void compute_forces_kernel(const float* pos_x, const float* pos_y, const float* pos_z,
                           double* acc_x, double* acc_y, double* acc_z, double* d_potential_energy,
                           int* particle_indices, int* cell_ids, int* cell_start, int* cell_end,
                           int N, double box, double box_r, int nx) {
@@ -28,9 +28,9 @@ void compute_forces_kernel(const double* pos_x, const double* pos_y, const doubl
     const float box_r_f = (float)box_r;
     
     // Position of ith particle
-    float my_x = (float)pos_x[i];
-    float my_y = (float)pos_y[i];
-    float my_z = (float)pos_z[i];
+    float my_x = pos_x[i];
+    float my_y = pos_y[i];
+    float my_z = pos_z[i];
     int my_cell = cell_ids[i];
     
     // Magnitude of force on ith particle
@@ -66,9 +66,9 @@ void compute_forces_kernel(const double* pos_x, const double* pos_y, const doubl
                     if (i == j) continue; // Don't interact with yourself
 
                     // Difference in positions of particles
-                    float ddx = my_x - (float)pos_x[j];
-                    float ddy = my_y - (float)pos_y[j];
-                    float ddz = my_z - (float)pos_z[j];
+                    float ddx = my_x - pos_x[j];
+                    float ddy = my_y - pos_y[j];
+                    float ddz = my_z - pos_z[j];
 
                     // Minimum Image Convention
                     ddx -= box_f * roundf(ddx * box_r_f);

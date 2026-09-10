@@ -10,5 +10,5 @@ void calculate_cell_ids_kernel(const double* pos_x, const double* pos_y, const d
 
 __global__
 void sort_position_kernel(const double* pos_x, const double* pos_y, const double* pos_z,
-                        double* sorted_pos_x, double* sorted_pos_y, double* sorted_pos_z,
+                        float* sorted_pos_x, float* sorted_pos_y, float* sorted_pos_z,
                         int N, int* particle_indices);

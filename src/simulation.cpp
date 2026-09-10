@@ -189,8 +189,12 @@ void run_simulation(SimConfig config) {
                           << "\n";
             }
 
-            data_file << pot_E << " " << kin_E << " " << Tot_E << " " << (2 * kin_E / (3 * N))
-                      << "\n";
+            data_file << std::setprecision(17)
+                << pot_E << " "
+                << kin_E << " "
+                << Tot_E << " "
+                << (2 * kin_E / (3 * N))
+                << "\n";
         }
     }
     traj_file.close();
@@ -223,7 +227,7 @@ void run_simulation(SimConfig config) {
         }
 
         std::cout << "====================================\n";
-        std::cout << "Time Reversibility Maximum Absolute Error: " << std::scientific << std::setprecision(6) << max_error << "\n";
+        std::cout << "Time Reversibility Maximum Absolute Error: " << std::scientific << std::setprecision(10) << max_error << "\n";
         std::cout << "====================================\n";
     }
 }
