@@ -16,7 +16,7 @@ struct SimConfig {
     bool gpu = true;
     int eq_steps = 0;
     std::string traj_file = "trajectory.xyz";
-    std::string data_file = "data.txt";
+    std::string data_file = "thermo.dat";
 };
 
 void parse_args(int argc, char** argv, SimConfig& cfg);
